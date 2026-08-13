@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "codex/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.os }} · Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, windows-latest]
+        python: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.7"
+          enable-cache: true
+          python-version: ${{ matrix.python }}
+      - name: Install locked dependencies
+        run: uv sync --locked --extra dev
+      - name: Static checks
+        run: uv run ruff check .
+      - name: Tests
+        run: uv run pytest
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.7"
+          enable-cache: true
+          python-version: "3.12"
+      - run: uv build
+      - name: Inspect package contents
+        run: unzip -l dist/*.whl

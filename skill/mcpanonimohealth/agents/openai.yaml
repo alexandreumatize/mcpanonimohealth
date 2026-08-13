@@ -1,0 +1,4 @@
+interface:
+  display_name: "Anonimização local em saúde"
+  short_description: "Desidentifica localmente receitas, laudos, PDFs e imagens"
+  default_prompt: "Use $mcpanonimohealth para selecionar e desidentificar localmente o documento; analise apenas o texto liberado em PASS."

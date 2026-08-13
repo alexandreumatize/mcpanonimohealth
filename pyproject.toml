@@ -1,0 +1,65 @@
+[build-system]
+requires = ["hatchling>=1.28,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mcpanonimohealth"
+version = "0.1.0"
+description = "Desidentifica documentos clinicos localmente antes de entrega-los a agentes de IA."
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+license = "Apache-2.0"
+authors = [{ name = "Alexandre Matos" }]
+keywords = ["mcp", "healthcare", "privacy", "de-identification", "lgpd"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+  "mcp>=2.0.0,<3",
+  "onnxruntime>=1.24,<2",
+  "pillow>=12.0,<13",
+  "pillow-heif>=1.3,<2",
+  "platformdirs>=4.5,<5",
+  "pydantic>=2.12,<3",
+  "pypdfium2>=5.2,<6",
+  "rapidocr>=3.5,<4",
+]
+
+[project.optional-dependencies]
+openmed = [
+  "openmed[hf]>=2.1,<3",
+  "torch>=2.10,<3",
+  "transformers>=5.0,<6",
+]
+dev = [
+  "pytest>=9.0,<10",
+  "pytest-cov>=7.0,<8",
+  "ruff>=0.15,<1",
+]
+
+[project.scripts]
+mcpanonimohealth = "mcpanonimohealth.cli:main"
+mcpanonimohealth-mcp = "mcpanonimohealth.server:main"
+
+[project.urls]
+Homepage = "https://github.com/alexandreumatize/mcpanonimohealth"
+Repository = "https://github.com/alexandreumatize/mcpanonimohealth"
+Issues = "https://github.com/alexandreumatize/mcpanonimohealth/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mcpanonimohealth"]
+
+[tool.pytest.ini_options]
+addopts = "-q --strict-markers"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S"]
+ignore = ["S101"]
