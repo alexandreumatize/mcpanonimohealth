@@ -55,5 +55,5 @@ if ($Claude) {
 
 Write-Host ""
 Write-Host "Instalação concluída. Reinicie o Codex/Claude Code antes do primeiro uso."
-Write-Host "Depois diga: use o mcpanonimohealth para abrir a interface local e desidentificar meu documento."
+Write-Host "Depois diga: use o mcpanonimohealth; oriente-me a não anexar e abra a interface local."
 Write-Host "Nunca anexe nem cole dados de pacientes no chat."

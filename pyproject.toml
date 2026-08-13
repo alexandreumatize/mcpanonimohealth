@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mcpanonimohealth"
-version = "0.2.0"
+version = "0.2.1"
 description = "Desidentifica documentos clinicos localmente antes de entrega-los a agentes de IA."
 readme = "README.md"
 requires-python = ">=3.12,<3.14"

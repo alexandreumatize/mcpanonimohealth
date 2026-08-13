@@ -49,6 +49,12 @@ def test_server_exposes_exactly_five_narrow_tools() -> None:
     }
 
 
+def test_agent_instructions_require_warning_before_any_tool() -> None:
+    assert "ANTES de qualquer ferramenta" in server.INSTRUCTIONS
+    assert "não anexe, arraste, cole nem envie" in server.INSTRUCTIONS
+    assert "Mostre o aviso mesmo" in server.INSTRUCTIONS
+
+
 def test_public_job_never_exposes_paths_or_filenames(monkeypatch) -> None:
     monkeypatch.setattr(server, "_manager", FakeManager())
     monkeypatch.setattr(

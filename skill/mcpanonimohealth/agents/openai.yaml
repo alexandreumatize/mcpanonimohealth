@@ -1,4 +1,4 @@
 interface:
   display_name: "Anonimização local em saúde"
   short_description: "Desidentifica localmente receitas, laudos, PDFs e imagens"
-  default_prompt: "Use $mcpanonimohealth para abrir a interface local dedicada; não aceite anexos no chat e analise apenas o texto liberado em PASS."
+  default_prompt: "Use $mcpanonimohealth. Antes de qualquer ferramenta, oriente-me a não anexar, arrastar ou colar o documento no chat; abra a interface local dedicada e analise apenas o texto liberado em PASS."

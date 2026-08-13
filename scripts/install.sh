@@ -51,5 +51,5 @@ fi
 
 echo
 echo "Instalação concluída. Reinicie o Codex/Claude Code antes do primeiro uso."
-echo "Depois diga: use o mcpanonimohealth para abrir a interface local e desidentificar meu documento."
+echo "Depois diga: use o mcpanonimohealth; oriente-me a não anexar e abra a interface local."
 echo "Nunca anexe nem cole dados de pacientes no chat."

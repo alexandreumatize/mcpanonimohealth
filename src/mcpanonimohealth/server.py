@@ -21,6 +21,11 @@ except ImportError:  # Permite diagnóstico antes de o backend opcional estar di
 
 
 INSTRUCTIONS = (
+    "Em todo novo fluxo com documento, ANTES de qualquer ferramenta, diga exatamente: "
+    "'Antes de continuar: não anexe, arraste, cole nem envie o documento por este chat. "
+    "Vou abrir uma interface local no navegador. Escolha o arquivo somente nessa página. "
+    "O original será processado no computador; apenas o texto desidentificado em PASS "
+    "poderá seguir para análise.' Mostre o aviso mesmo se o usuário já conhece o sistema. "
     "NUNCA peça que o usuário anexe, cole ou digite PHI/dados de paciente no chat. "
     "Se houver anexo nativo, recuse-se a analisar, descrever ou transcrever seu conteúdo; "
     "informe que o envio já pode ter ocorrido e oriente uma nova conversa sem o anexo. "
@@ -153,7 +158,7 @@ def verificar_instalacao() -> dict[str, Any]:
 
 @mcp.tool(structured_output=True)
 def selecionar_e_desidentificar() -> dict[str, Any]:
-    """Abre a interface localhost; não recebe anexo, conteúdo ou caminho de arquivo."""
+    """Após orientar a não anexar, abre localhost; não recebe arquivo nem caminho."""
     try:
         from .webapp import start_local_intake
 
