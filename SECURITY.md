@@ -2,7 +2,7 @@
 
 ## Aviso essencial
 
-O mcpanonimohealth 0.1 é uma demonstração didática, não validada para dados reais, assistência clínica ou conformidade regulatória. Detecção automática pode falhar. Não trate `PASS` como certificação de anonimização.
+O mcpanonimohealth 0.2 é uma demonstração didática, não validada para dados reais, assistência clínica ou conformidade regulatória. Detecção automática pode falhar. Não trate `PASS` como certificação de anonimização.
 
 ## Relatar uma vulnerabilidade
 
@@ -15,7 +15,11 @@ Inclua versão, sistema operacional, passos mínimos e um caso inteiramente sint
 Proteções pretendidas:
 
 - ferramentas MCP não recebem caminho ou nome bruto como argumento;
-- o seletor de arquivos é local e acionado sem devolver o caminho ao agente;
+- a entrada do documento ocorre em uma interface ligada somente a `127.0.0.1`;
+- a interface usa URL de sessão aleatória, uso único, proteção de origem, CSP sem recursos externos e `Cache-Control: no-store`;
+- a cópia temporária usa diretório privado e é apagada imediatamente após o processamento;
+- o nome, o caminho, o original e o texto clínico não são devolvidos pela interface web ao navegador nem pelo job público ao agente;
+- `AGENTS.md`, `CLAUDE.md` e a skill exigem recusa de anexos nativos;
 - somente texto de job em `PASS` pode ser recuperado;
 - `HOLD`, `ERROR` e `EXPIRED` não devolvem conteúdo clínico;
 - logs devem conter somente metadados operacionais não identificáveis;
@@ -24,6 +28,8 @@ Proteções pretendidas:
 
 Fora da fronteira de proteção:
 
+- anexos feitos pela função nativa do Codex ou Claude Code, que podem ser enviados ao provedor antes de qualquer recusa do agente;
+- aderência perfeita do modelo a instruções comportamentais;
 - um agente com acesso amplo ao mesmo usuário do sistema operacional;
 - comprometimento do computador, do provedor de IA ou da cadeia de dependências;
 - reidentificação por contexto clínico raro ou combinação com outras bases;

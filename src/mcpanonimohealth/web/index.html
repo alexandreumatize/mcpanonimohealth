@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="local-session" content="{{SESSION_TOKEN}}">
+  <title>mcpanonimohealth · Medical Code</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="app.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <div class="page-shell">
+    <header class="brand-line" aria-label="Medical Code">
+      <a class="wordmark" href="#inicio" aria-label="Medical Code, início">Medical Code<span>_</span></a>
+      <div class="local-signal"><i aria-hidden="true"></i> executando localmente</div>
+    </header>
+
+    <main id="inicio">
+      <section class="hero" aria-labelledby="page-title">
+        <div class="hero-copy">
+          <p class="eyebrow">Proteção de dados · fluxo local</p>
+          <h1 id="page-title">Seu documento<br><em>não entra</em> no chat.</h1>
+          <p class="lede">Escolha a receita, o laudo, a imagem ou o PDF nesta página. O arquivo será processado no seu computador; o agente receberá somente o texto aprovado pela barreira de desidentificação.</p>
+        </div>
+
+        <div class="custody" aria-label="Fluxo de custódia do documento">
+          <div class="custody-step active">
+            <span class="step-index">01</span>
+            <strong>Documento local</strong>
+            <small>permanece neste computador</small>
+          </div>
+          <span class="custody-line" aria-hidden="true"></span>
+          <div class="custody-step">
+            <span class="step-index">02</span>
+            <strong>OCR + proteção</strong>
+            <small>modelos locais, sem nuvem</small>
+          </div>
+          <span class="custody-line" aria-hidden="true"></span>
+          <div class="custody-step">
+            <span class="step-index">03</span>
+            <strong>Texto liberado</strong>
+            <small>somente quando houver PASS</small>
+          </div>
+        </div>
+      </section>
+
+      <section class="intake" aria-labelledby="intake-title">
+        <div class="intake-heading">
+          <div>
+            <p class="eyebrow">Entrada protegida</p>
+            <h2 id="intake-title">Escolha o documento neste computador</h2>
+          </div>
+          <span class="format-list">PDF · PNG · JPEG · HEIC · TIFF · TXT</span>
+        </div>
+
+        <form id="intake-form" novalidate>
+          <input id="document" name="document" type="file" hidden accept=".pdf,.png,.jpg,.jpeg,.webp,.tif,.tiff,.heic,.heif,.txt">
+          <button id="drop-zone" class="drop-zone" type="button">
+            <span class="file-glyph" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span class="drop-copy">
+              <strong id="drop-title">Selecionar documento</strong>
+              <small id="drop-note">Clique aqui ou arraste o arquivo para esta área</small>
+            </span>
+            <span class="choose-label">Escolher arquivo</span>
+          </button>
+
+          <div class="action-row">
+            <p><strong>O que acontece agora?</strong> Uma cópia temporária privada será criada, processada e apagada imediatamente. O nome do arquivo não será devolvido ao agente.</p>
+            <button id="process-button" class="primary-action" type="submit" disabled>Desidentificar neste computador</button>
+          </div>
+        </form>
+
+        <section id="processing" class="processing" hidden aria-live="polite">
+          <div class="scan-line" aria-hidden="true"></div>
+          <span class="processing-label">Processamento local em andamento</span>
+          <strong>Não feche esta página.</strong>
+          <small>Imagens e PDFs podem levar de 30 a 60 segundos.</small>
+        </section>
+
+        <section id="result" class="result" hidden aria-live="assertive">
+          <div class="result-mark" aria-hidden="true"></div>
+          <div>
+            <p id="result-kicker" class="eyebrow"></p>
+            <h2 id="result-title"></h2>
+            <p id="result-message"></p>
+            <div id="result-metrics" class="result-metrics"></div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <footer class="evidence-strip">
+      <strong>Medical Code · Surgical Precision</strong>
+      <span>O arquivo original não é anexado ao Codex ou Claude Code por este fluxo.</span>
+    </footer>
+  </div>
+</body>
+</html>

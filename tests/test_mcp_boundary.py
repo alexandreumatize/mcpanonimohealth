@@ -51,11 +51,23 @@ def test_server_exposes_exactly_five_narrow_tools() -> None:
 
 def test_public_job_never_exposes_paths_or_filenames(monkeypatch) -> None:
     monkeypatch.setattr(server, "_manager", FakeManager())
+    monkeypatch.setattr(
+        "mcpanonimohealth.webapp.start_local_intake",
+        lambda _manager: {
+            "job_id": "CASE-TEST",
+            "state": "PROCESSING",
+            "pages": 0,
+            "duration_ms": 0,
+            "counts": {},
+            "reasons": [],
+        },
+    )
     result = server.selecionar_e_desidentificar()
     serialized = str(result)
     assert result["ok"] is True
     assert "/private" not in serialized
     assert "patient-name.pdf" not in serialized
+    assert result["interface_local_aberta"] is True
 
 
 def test_hold_never_releases_text(monkeypatch) -> None:
@@ -70,4 +82,3 @@ def test_pass_releases_only_clean_text(monkeypatch) -> None:
     result = server.obter_texto_desidentificado("CASE-TEST")
     assert result["ok"] is True
     assert result["texto_desidentificado"] == "Paciente [PACIENTE_001]."
-

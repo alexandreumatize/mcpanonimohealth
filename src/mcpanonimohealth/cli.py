@@ -33,7 +33,9 @@ def _doctor() -> int:
                 "versao": __version__,
                 "processamento": "local",
                 "verificacoes": checks,
-                "aviso": "Nunca anexe nem cole dados de pacientes no chat.",
+                "aviso": (
+                    "Nunca anexe dados de pacientes ao chat; use somente a interface localhost."
+                ),
             },
             ensure_ascii=False,
         )

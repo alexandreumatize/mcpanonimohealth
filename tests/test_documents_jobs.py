@@ -88,3 +88,17 @@ def test_discard_makes_text_unavailable(monkeypatch, tmp_path: Path) -> None:
     else:
         raise AssertionError("job descartado não pode liberar texto")
 
+
+def test_reserved_job_can_be_processed_without_exposing_path(tmp_path: Path) -> None:
+    raw = tmp_path / "nome-de-paciente-sintetico.txt"
+    raw.write_text(
+        "Paciente: Maria da Silva\nCPF: 529.982.247-25\nDiagnóstico: artrite reumatoide.",
+        encoding="utf-8",
+    )
+    manager = JobManager()
+    manager._sanitizer = Sanitizer(DeterministicDetector(), require_ner=False)  # noqa: SLF001
+    reserved = manager.reserve()
+    result = manager.process_path(str(reserved["job_id"]), raw)
+    assert result["state"] == JobState.PASS.value
+    assert str(raw) not in str(result)
+    assert raw.name not in str(result)

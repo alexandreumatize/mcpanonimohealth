@@ -1,0 +1,4 @@
+Paciente fictícia: Maria da Silva
+CPF sintético válido para teste: 529.982.247-25
+Diagnóstico fictício: artrite reumatoide
+Documento criado exclusivamente para demonstração automatizada, sem pessoa real.
