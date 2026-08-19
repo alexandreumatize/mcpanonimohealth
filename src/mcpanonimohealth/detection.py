@@ -25,11 +25,20 @@ class Detector(Protocol):
 
 
 _FLAGS = re.IGNORECASE | re.MULTILINE
-_NAME_WORD = r"[A-ZÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇ][A-Za-zÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇáàâãéèêíìîóòôõúùûç'-]+"
+# (?-i:...) mantém a inicial maiúscula mesmo com IGNORECASE nos rótulos.
+_NAME_WORD = (
+    r"(?-i:[A-ZÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇ])"
+    r"[A-Za-zÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇáàâãéèêíìîóòôõúùûç'-]+"
+)
+_CITY_WORD = (
+    r"(?-i:[A-ZÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇ])"
+    r"[A-Za-zÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇáàâãéèêíìîóòôõúùûç'-]+"
+)
 # Espaço horizontal é intencional: nomes nunca podem consumir o rótulo da
 # linha seguinte quando o OCR preserva quebras de linha.
 _HSPACE = r"[ \t]"
 _NAME = rf"{_NAME_WORD}(?:{_HSPACE}+(?:(?:d[aeo]s?|e){_HSPACE}+)?{_NAME_WORD}){{1,5}}"
+_CITY_NAME = rf"{_CITY_WORD}(?:{_HSPACE}+{_CITY_WORD}){{0,3}}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,29 +58,78 @@ _CONTEXT_RULES: tuple[_Rule, ...] = (
         "patient_label",
         EntityType.PATIENT,
         _compile(
-            rf"(?:nome\s+d[oa]\s+paciente|paciente){_HSPACE}*[:\-]{_HSPACE}*"
+            rf"(?:nome\s+d[oa]\s+paciente|nome\s+completo|paciente){_HSPACE}*[:\-]{_HSPACE}*"
             rf"(?P<value>{_NAME})"
         ),
         0.99,
     ),
     _Rule(
+        "patient_label_nearby_line",
+        EntityType.PATIENT,
+        # OCR de receita: "Paciente:" + linhas de UI + nome em linha própria.
+        _compile(
+            rf"(?:nome\s+d[oa]\s+paciente|nome\s+completo|paciente){_HSPACE}*[:\-]"
+            rf"(?:[^\n]{{0,60}}\n){{1,4}}"
+            rf"{_HSPACE}*(?P<value>{_NAME}){_HSPACE}*(?=\n|$)"
+        ),
+        0.96,
+    ),
+    _Rule(
+        "patient_usuario",
+        EntityType.PATIENT,
+        _compile(
+            rf"(?:para\s+[ao]\s+)?usu[aá]ri[oa]{_HSPACE}+(?P<value>{_NAME})"
+        ),
+        0.98,
+    ),
+    _Rule(
         "doctor_label",
         EntityType.DOCTOR,
         _compile(
-            rf"(?:nome\s+d[oa]\s+m[eé]dic[oa]|m[eé]dic[oa]|dr\.?|dra\.?)"
+            rf"(?:nome\s+d[oa]\s+m[eé]dic[oa](?:\s+solicitante)?|"
+            rf"m[eé]dic[oa]\s+solicitante|m[eé]dic[oa](?!mento)|dr\.?|dra\.?|dr\s*\(\s*a\s*\)\.?)"
             rf"{_HSPACE}*[:\-]?{_HSPACE}*(?P<value>{_NAME})"
         ),
         0.98,
     ),
     _Rule(
+        "doctor_before_specialty",
+        EntityType.DOCTOR,
+        _compile(
+            rf"(?P<value>{_NAME})\s*(?:\n|\r\n)\s*"
+            rf"(?:m[eé]dico(?:\s+reumatologista|\s+prescritor)?|reumatologista)\b"
+        ),
+        0.97,
+    ),
+    _Rule(
+        "doctor_after_atenciosamente",
+        EntityType.DOCTOR,
+        _compile(rf"atenciosamente\s*[,:]?\s*(?P<value>{_NAME})"),
+        0.96,
+    ),
+    _Rule(
         "institution_label",
         EntityType.INSTITUTION,
         _compile(
-            rf"(?:institui[cç][aã]o|estabelecimento|servi[cç]o|unidade){_HSPACE}*"
-            rf"[:\-]{_HSPACE}*"
+            rf"(?:institui[cç][aã]o|estabelecimento|servi[cç]o|unidade|"
+            rf"nome\s+d[oa]\s+institui[cç][aã]o(?:\s+de\s+sa[uú]de)?)"
+            rf"{_HSPACE}*[:\-]{_HSPACE}*"
             r"(?P<value>[^\s\n;][^\n;]{2,99})"
         ),
         0.97,
+    ),
+    _Rule(
+        "institution_label_nearby_line",
+        EntityType.INSTITUTION,
+        # Só quando o valor está em linha própria (rótulo + quebra).
+        _compile(
+            rf"(?:nome\s+d[oa]\s+institui[cç][aã]o(?:\s+de\s+sa[uú]de)?|"
+            rf"institui[cç][aã]o(?:\s+de\s+sa[uú]de)?)"
+            rf"{_HSPACE}*[:\-]{_HSPACE}*\n"
+            rf"(?:{_HSPACE}*\n){{0,1}}"
+            rf"{_HSPACE}*(?P<value>[^\s\n;][^\n;]{{2,99}}){_HSPACE}*(?=\n|$)"
+        ),
+        0.96,
     ),
     _Rule(
         "institution_prefix",
@@ -81,27 +139,223 @@ _CONTEXT_RULES: tuple[_Rule, ...] = (
             r"unidade\s+b[aá]sica\s+de\s+sa[uú]de|ubs|upa)\s+"
             r"[A-ZÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇ][^\n,;]{2,80})"
         ),
-        0.94,
+        0.98,
+    ),
+    _Rule(
+        "ses_estado",
+        EntityType.INSTITUTION,
+        # Estado de atendimento / órgão emissor (ex.: SES-SP).
+        _compile(
+            r"(?P<value>\b(?:secretaria\s+de\s+estado\s+da\s+sa[uú]de(?:\s+de\s+[^\n,]{2,60})?|"
+            r"secretaria\s+da\s+sa[uú]de|"
+            r"governo\s+do\s+estado(?:\s+de\s+[^\n,]{2,40})?|"
+            r"goyerno\s+do\s+estado|"
+            r"coordenadoria\s+de\s+regi[oõ]es\s+de\s+sa[uú]de))"
+        ),
+        0.97,
+    ),
+    _Rule(
+        "doctor_specialty",
+        EntityType.DOCTOR,
+        # Especialidade do assinante (OCR: MédicoReumatologista / SPReumatologia).
+        _compile(
+            r"(?P<value>\bm[eé]dico\s*reumatologista\b|"
+            r"\b(?:sp\s*)?reumatologista\b|"
+            r"\b(?:sp\s*)?reumatologia\b)"
+        ),
+        0.93,
+    ),
+    _Rule(
+        "estado_sao_paulo_ocr",
+        EntityType.ADDRESS,
+        _compile(
+            r"(?P<value>\bs[ãa\u00c3]o\s*paulo\b|\bsãopaulo\b|\bsaopaulo\b|\bs[\u00c3ã]opaulo\b)",
+            flags=re.IGNORECASE,
+        ),
+        0.96,
+    ),
+    _Rule(
+        "uf_after_crm_marker",
+        EntityType.ADDRESS,
+        # Após mascarar CRM sobra "SP — Reumatologia".
+        _compile(r"\[CRM_\d+\]\s*(?P<value>[A-Z]{2})\b"),
+        0.95,
     ),
     _Rule(
         "address_label",
         EntityType.ADDRESS,
         _compile(
-            rf"(?:endere[cç]o|resid[eê]ncia|domic[ií]lio){_HSPACE}*[:\-]{_HSPACE}*"
+            rf"(?:endere[cç]o|resid[eê]ncia|domic[ií]lio){_HSPACE}*[:\-]?\s*"
             r"(?P<value>[^\s\n;][^\n;]{4,139})"
         ),
         0.99,
     ),
     _Rule(
+        "address_complemento",
+        EntityType.ADDRESS,
+        _compile(
+            rf"(?:complemento|apto\.?|apartamento|sala|bloco|torre)"
+            rf"{_HSPACE}*[:\-]{_HSPACE}*"
+            r"(?P<value>[^\s\n;][^\n;]{1,79})"
+        ),
+        0.98,
+    ),
+    _Rule(
+        "address_sala_inline",
+        EntityType.ADDRESS,
+        # "Sala 1012 e 1013" mesmo sem rótulo "Complemento:"
+        _compile(
+            r"(?P<value>\b(?:sala|apto\.?|apartamento|bloco)\s+"
+            r"[A-Z0-9][A-Za-z0-9.\-/ \t]{0,40}\d{1,5}(?:\s+e\s+\d{1,5})?)"
+        ),
+        0.94,
+    ),
+    _Rule(
+        "address_street",
+        EntityType.ADDRESS,
+        _compile(
+            r"(?P<value>\b(?:rua|r\.|avenida|av\.|alameda|al\.|travessa|tv\.|"
+            r"estrada|rodovia|pra[cç]a|largo|viela)\s+"
+            r"[A-Za-zÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇáàâãéèêíìîóòôõúùûç0-9][^\n]{4,119})"
+        ),
+        0.97,
+    ),
+    _Rule(
+        "address_bairro_municipio",
+        EntityType.ADDRESS,
+        _compile(
+            rf"(?:bairro|munic[ií]pio|cidade){_HSPACE}*[:\-]{_HSPACE}*"
+            r"(?P<value>[^\s\n;][^\n;]{2,79})"
+        ),
+        0.96,
+    ),
+    _Rule(
+        "address_bairro_municipio_nearby_line",
+        EntityType.ADDRESS,
+        # OCR de formulário: "Bairro:\nBoqueirão"
+        _compile(
+            rf"(?:bairro|munic[ií]pio|cidade|complemento){_HSPACE}*[:\-]"
+            rf"(?:[^\n]{{0,40}}\n){{1,2}}"
+            rf"{_HSPACE}*(?P<value>[^\s\n;][^\n;]{{2,79}}){_HSPACE}*(?=\n|$)"
+        ),
+        0.95,
+    ),
+    _Rule(
+        "address_number_labeled",
+        EntityType.ADDRESS,
+        _compile(
+            rf"(?:n[ºo°]\.?|n[uú]mero){_HSPACE}*[:\-]{_HSPACE}*"
+            r"(?P<value>\d{1,6})\b"
+        ),
+        0.9,
+    ),
+    _Rule(
+        "health_region_drs",
+        EntityType.ADDRESS,
+        _compile(
+            r"(?P<value>\bDRS\s+[IVXLC\d]{1,8}(?:\s*[-–]\s*[^\n]{3,80})?)",
+            flags=re.IGNORECASE,
+        ),
+        0.97,
+    ),
+    _Rule(
+        "city_uf_slash",
+        EntityType.ADDRESS,
+        # Praia Grande/SP | Santos/SP — só espaço horizontal entre palavras.
+        _compile(rf"(?P<value>\b{_CITY_NAME}{_HSPACE}*/{_HSPACE}*[A-Z]{{2}}\b)"),
+        0.95,
+    ),
+    _Rule(
+        "city_uf_dash",
+        EntityType.ADDRESS,
+        _compile(rf"(?P<value>\b{_CITY_NAME}{_HSPACE}*[-–]{_HSPACE}*[A-Z]{{2}}\b)"),
+        0.94,
+    ),
+    _Rule(
+        "city_before_letter_date",
+        EntityType.ADDRESS,
+        # "Praia Grande, 24 de abril de 2026." / "Santos, 24 de abril de 2026."
+        _compile(
+            rf"(?P<value>\b{_CITY_NAME})"
+            r"(?=,\s*(?:0?[1-9]|[12]\d|3[01])\s+de\s+[a-zç]+)"
+        ),
+        0.93,
+    ),
+    _Rule(
+        "uf_labeled",
+        EntityType.ADDRESS,
+        _compile(rf"\buf{_HSPACE}*[:\-]{_HSPACE}*(?P<value>[A-Z]{{2}})\b"),
+        0.92,
+    ),
+    _Rule(
+        "signature_before_patient",
+        EntityType.PERSON,
+        # Linha de assinatura OCR (ex.: "Eore tily Sos Rhhels") antes do rótulo.
+        _compile(
+            rf"(?P<value>[^\n]{{8,80}})\n{_HSPACE}*"
+            r"assinatura\s+d[oa]\s+paciente"
+        ),
+        0.91,
+    ),
+    _Rule(
+        "dob_after_age_fragment",
+        EntityType.DATE_OF_BIRTH,
+        # "…-83,de 22-02-1942" / "83 anos, de 03/02/1942"
+        _compile(
+            r"(?:-\d{1,3}|\d{1,3}\s*anos?)\s*,?\s*de\s+"
+            r"(?P<value>(?:0?[1-9]|[12]\d|3[01])[/.-](?:0?[1-9]|1[0-2])[/.-]"
+            r"(?:19|20)\d{2})"
+        ),
+        0.98,
+    ),
+    _Rule(
+        "access_code_seu",
+        EntityType.CREDENTIAL,
+        _compile(r"\bseu\s+(?P<value>\d{2,10})\b"),
+        0.94,
+    ),
+    _Rule(
+        "convenio_label",
+        EntityType.INSURANCE,
+        _compile(
+            rf"(?:conv[eê]nio|plano\s+de\s+sa[uú]de|operadora(?:\s+de\s+sa[uú]de)?|"
+            rf"seguro\s+sa[uú]de|plano\s+de\s+s[aá]ude){_HSPACE}*[:\-–]\s*"
+            r"(?P<value>(?!n[aã]o\b|sim\b)[A-Za-zÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇ0-9][^\n;]{1,79})"
+        ),
+        0.98,
+    ),
+    _Rule(
+        "convenio_qual",
+        EntityType.INSURANCE,
+        _compile(
+            rf"(?:qual|nome\s+d[oa]\s+plano|nome\s+d[oa]\s+conv[eê]nio)"
+            rf"{_HSPACE}*[:\-–]\s*"
+            r"(?P<value>(?!n[aã]o\b|sim\b)[A-Za-zÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇ0-9][^\n;]{1,79})"
+        ),
+        0.97,
+    ),
+    _Rule(
         "birth_date_label",
         EntityType.DATE_OF_BIRTH,
         _compile(
-            rf"(?:data\s+de\s+nascimento|nascimento|nasc\.?|dn){_HSPACE}*[:\-]"
+            rf"(?:data\s+de\s+nascimento|nascimento|nasc\.?|dn){_HSPACE}*[:\-]?"
             rf"{_HSPACE}*"
-            r"(?P<value>(?:0?[1-9]|[12]\d|3[01])[/.-](?:0?[1-9]|1[0-2])[/.-](?:19|20)\d{2}|"
+            r"(?P<value>(?:0?[1-9]|[12]\d|3[01])[/.\-\s]+(?:0?[1-9]|1[0-2])[/.\-\s]+(?:19|20)\d{2}|"
             r"(?:19|20)\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01]))"
         ),
         1.0,
+    ),
+    _Rule(
+        "birth_date_ocr_fragment",
+        EntityType.DATE_OF_BIRTH,
+        # OCR quebrado: "Nascimento: ... /04 ... 1942" (ano 19xx perto do rótulo)
+        _compile(
+            r"(?:data\s+de\s+nascimento|nascimento|nasc\.?|dn)"
+            r"[\s\S]{0,80}?"
+            r"(?P<value>(?:0?[1-9]|[12]\d|3[01])?\s*[/.\-]\s*(?:0?[1-9]|1[0-2])"
+            r"[\s\S]{0,12}?19\d{2}|(?<!\d)19\d{2}(?!\d))"
+        ),
+        0.99,
     ),
 )
 
@@ -114,10 +368,52 @@ _IDENTIFIER_RULES: tuple[_Rule, ...] = (
         1.0,
     ),
     _Rule(
+        "email_labeled",
+        EntityType.EMAIL,
+        _compile(
+            r"(?:e-?mail|email)\s*[:\-–]?\s*"
+            r"(?P<value>[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,63})"
+        ),
+        1.0,
+    ),
+    _Rule(
         "url",
         EntityType.URL,
         _compile(r"(?P<value>\b(?:https?://|www\.)[^\s<>\]\[\"']+)", flags=re.IGNORECASE),
         1.0,
+    ),
+    _Rule(
+        "url_bare_domain",
+        EntityType.URL,
+        # r.mevosaude.com.br/MUVV4RN | validar.iti.gov.br
+        _compile(
+            r"(?P<value>\b(?:[a-z0-9](?:[a-z0-9\-]*[a-z0-9])?\.)+"
+            r"(?:com\.br|gov\.br|edu\.br|org\.br|net\.br|com|org|net|br|gov)"
+            r"(?:/[^\s<>\]\[\"']*)?)",
+            flags=re.IGNORECASE,
+        ),
+        0.99,
+    ),
+    _Rule(
+        "access_code_labeled",
+        EntityType.CREDENTIAL,
+        _compile(
+            r"(?:c[oó]digo\s+de\s+acesso|c[oó]digo\s+de\s+valida[cç][aã]o|"
+            r"senha\s+de\s+acesso|pin\s+de\s+acesso)"
+            r"\s*(?:[eé]\s*)?[:\-–]?\s*(?P<value>\d{4,10})\b"
+        ),
+        0.98,
+    ),
+    _Rule(
+        "doctor_before_crm",
+        EntityType.DOCTOR,
+        _compile(
+            rf"(?P<value>{_NAME})"
+            rf"(?:[ \t]{{0,48}}|[ \t]*\n[ \t]*)"
+            # CNES é instituição — não usar como âncora de médico.
+            rf"(?=\b(?:c\s*)?r\s*m\b|\brqe\b|\broe\b)"
+        ),
+        0.95,
     ),
     _Rule(
         "phone_formatted",
@@ -131,29 +427,90 @@ _IDENTIFIER_RULES: tuple[_Rule, ...] = (
     _Rule(
         "phone_labeled",
         EntityType.PHONE,
-        _compile(r"(?:telefone|celular|fone|whatsapp)\s*[:\-]\s*(?P<value>\d{10,11})"),
-        0.98,
+        _compile(
+            r"(?:telefone(?:\s*\(\s*s\s*\))?|celular|fone|whatsapp|tel\.?)"
+            r"\s*[:\-–]?\s*"
+            r"(?P<value>(?:\(?[1-9]\d\)?[\s.-]*)?(?:9\d{4}|[2-8]\d{3})[\s.-]?\d{4})"
+        ),
+        0.99,
+    ),
+    _Rule(
+        "phone_mobile_local",
+        EntityType.PHONE,
+        # Celular BR sem DDD, comum em OCR de formulários: 99135-9190
+        _compile(r"(?P<value>(?<!\d)9\d{4}[\s.-]\d{4}(?!\d))"),
+        0.95,
+    ),
+    _Rule(
+        "phone_ddd_labeled",
+        EntityType.PHONE,
+        _compile(r"\bddd\s*[:\-–]?\s*(?P<value>\d{2})\b"),
+        0.96,
+    ),
+    _Rule(
+        "phone_ddd_then_number",
+        EntityType.PHONE,
+        _compile(
+            r"\bddd\s*[:\-–]?\s*\d{2}\D{0,40}"
+            r"(?:telefone(?:\s*\(\s*s\s*\))?|celular|fone)?\s*[:\-–]?\s*"
+            r"(?P<value>(?:9\d{4}|[2-8]\d{3})[\s.-]?\d{4})"
+        ),
+        0.97,
+    ),
+    _Rule(
+        "state_alone_labeled",
+        EntityType.ADDRESS,
+        _compile(
+            r"(?:estado|uf)\s*[:\-–]\s*(?P<value>[A-Z]{2})\b"
+        ),
+        0.96,
     ),
     _Rule(
         "postal_code_formatted",
         EntityType.POSTAL_CODE,
-        _compile(r"(?P<value>(?<!\d)\d{5}-\d{3}(?!\d))"),
+        _compile(r"(?P<value>(?<!\d)\d{5}\s*[-–]?\s*\d{3}(?!\d))"),
         0.99,
+    ),
+    _Rule(
+        "postal_code_compact",
+        EntityType.POSTAL_CODE,
+        _compile(r"(?P<value>(?<!\d)\d{8}(?!\d))"),
+        0.93,
     ),
     _Rule(
         "postal_code_labeled",
         EntityType.POSTAL_CODE,
-        _compile(r"\bcep\s*[:\-]\s*(?P<value>\d{8})(?!\d)"),
+        _compile(
+            r"\bcep\s*[:\-]?\s*(?P<value>\d{5}\s*[-–]?\s*\d{3}|\d{8})(?!\d)"
+        ),
         0.99,
     ),
     _Rule(
         "crm",
         EntityType.CRM,
         _compile(
-            r"\bcrm(?:\s*[-/]?\s*[A-Z]{2})?\s*[:#\-]?\s*"
-            r"(?P<value>\d{3,8}(?:\s*[-/]\s*[A-Z]{2})?)\b"
+            # Captura o bloco inteiro para não sobrar CRMISP/CRMSP no texto.
+            r"(?P<value>\b(?:c\s*)?r\s*m(?:[-/\s]*[A-Z]{0,3})?\s*"
+            r"(?:n[ºo°]\.?)?\s*[:#\-]?\s*"
+            r"(?:\d{2,3}(?:[.\s]\d{3}){1,2}|\d{4,8})"
+            r"(?:\s*[-/]\s*[A-Z]{2})?)\b"
         ),
         0.99,
+    ),
+    _Rule(
+        "rqe",
+        EntityType.GENERIC_ID,
+        _compile(
+            # RQE 83515 | ROE83515 (OCR) | RQE[token]
+            r"(?P<value>\b(?:rqe|roe|rqo)\s*[:#\-]?\s*\d{3,8})\b"
+        ),
+        0.98,
+    ),
+    _Rule(
+        "cnes",
+        EntityType.GENERIC_ID,
+        _compile(r"\bcnes\s*[:#\-]?\s*(?P<value>\d{5,8})\b"),
+        0.97,
     ),
     _Rule(
         "rg_labeled",
@@ -197,6 +554,13 @@ _IDENTIFIER_RULES: tuple[_Rule, ...] = (
         EntityType.AGE,
         _compile(r"(?P<value>(?<!\d)(?:[0-9]|[1-9]\d|1[01]\d|12[0-5])\s*anos?\b)"),
         0.97,
+    ),
+    _Rule(
+        "cpf_fragment_before_dob",
+        EntityType.CPF,
+        # OCR: "252.77[DATA_NASCIMENTO]" / CPF partido.
+        _compile(r"(?P<value>(?<!\d)\d{3}\.\d{2,3})(?=\s*(?:\d{3}|\[DATA_NASCIMENTO\]))"),
+        0.95,
     ),
 )
 
@@ -253,17 +617,29 @@ def _finding(rule: _Rule, match: re.Match[str]) -> Finding | None:
     )
 
 
+def _span_contains(outer: Span, inner: Span) -> bool:
+    return outer.start <= inner.start and inner.end <= outer.end
+
+
 def _resolve_overlaps(findings: Iterable[Finding]) -> tuple[Finding, ...]:
-    # Confiança ganha; em empate, o maior trecho ganha. O resultado final volta
-    # à ordem textual para permitir substituição determinística.
+    # Prefere o maior trecho (ex.: linha de endereço completa) para não deixar
+    # CEP/UF internos “vencerem” e vazarem o restante da rua/bairro.
     ranked = sorted(
         findings,
-        key=lambda item: (-item.confidence, -item.span.length, item.span.start, item.entity.value),
+        key=lambda item: (-item.span.length, -item.confidence, item.span.start, item.entity.value),
     )
     selected: list[Finding] = []
     for candidate in ranked:
-        if not any(candidate.span.overlaps(existing.span) for existing in selected):
-            selected.append(candidate)
+        if any(_span_contains(existing.span, candidate.span) for existing in selected):
+            continue
+        selected = [
+            existing
+            for existing in selected
+            if not _span_contains(candidate.span, existing.span)
+        ]
+        if any(candidate.span.overlaps(existing.span) for existing in selected):
+            continue
+        selected.append(candidate)
     return tuple(sorted(selected, key=lambda item: (item.span.start, item.span.end)))
 
 
@@ -376,6 +752,9 @@ _OPENMED_LABELS: dict[str, EntityType] = {
     "PHONE": EntityType.PHONE,
     "EMAIL": EntityType.EMAIL,
     "ID": EntityType.RECORD_ID,
+    "INSURANCE": EntityType.INSURANCE,
+    "HEALTHINSURANCE": EntityType.INSURANCE,
+    "HEALTH_PLAN": EntityType.INSURANCE,
 }
 
 

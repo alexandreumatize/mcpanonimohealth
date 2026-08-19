@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import secrets
 import tempfile
 import threading
+import time
 import webbrowser
+import zipfile
 from email.parser import BytesParser
 from email.policy import default
 from http import HTTPStatus
@@ -16,9 +19,10 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
+from .batch import MAX_BATCH_FILES, process_batch_payloads
 from .documents import MAX_BYTES, SUPPORTED_SUFFIXES
 
-MAX_REQUEST_BYTES = MAX_BYTES + 1024 * 1024
+MAX_REQUEST_BYTES = min(200 * 1024 * 1024, MAX_BYTES * MAX_BATCH_FILES)
 SESSION_SECONDS = 15 * 60
 
 _sessions: set[LocalIntakeSession] = set()
@@ -29,7 +33,7 @@ def _asset(name: str) -> bytes:
     return files("mcpanonimohealth.web").joinpath(name).read_bytes()
 
 
-def _safe_upload(content_type: str, body: bytes) -> tuple[str, bytes]:
+def _safe_uploads(content_type: str, body: bytes) -> list[tuple[str, bytes]]:
     if not content_type.casefold().startswith("multipart/form-data;"):
         raise ValueError("INVALID_CONTENT_TYPE")
     message = BytesParser(policy=default).parsebytes(
@@ -37,9 +41,11 @@ def _safe_upload(content_type: str, body: bytes) -> tuple[str, bytes]:
     )
     if not message.is_multipart():
         raise ValueError("INVALID_MULTIPART")
+    uploads: list[tuple[str, bytes]] = []
     for part in message.iter_parts():
         disposition = part.get("Content-Disposition", "")
-        if part.get_param("name", header="content-disposition") != "document":
+        name = part.get_param("name", header="content-disposition")
+        if name not in {"document", "documents"}:
             continue
         if "form-data" not in disposition.casefold():
             continue
@@ -52,8 +58,21 @@ def _safe_upload(content_type: str, body: bytes) -> tuple[str, bytes]:
             raise ValueError("EMPTY_FILE")
         if len(payload) > MAX_BYTES:
             raise ValueError("FILE_TOO_LARGE")
-        return suffix, payload
-    raise ValueError("DOCUMENT_MISSING")
+        uploads.append((suffix, payload))
+        if len(uploads) > MAX_BATCH_FILES:
+            raise ValueError("TOO_MANY_FILES")
+    if not uploads:
+        raise ValueError("DOCUMENT_MISSING")
+    return uploads
+
+
+def _zip_directory(root: Path) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for path in sorted(root.rglob("*")):
+            if path.is_file() and not path.is_symlink():
+                archive.write(path, arcname=str(path.relative_to(root)))
+    return buffer.getvalue()
 
 
 class _LoopbackServer(ThreadingHTTPServer):
@@ -120,6 +139,21 @@ class _RequestHandler(BaseHTTPRequestHandler):
         if self.path == f"{session.route}app.js":
             self._send(HTTPStatus.OK, _asset("app.js"), "text/javascript; charset=utf-8")
             return
+        if self.path == f"{session.route}baixar.zip":
+            zip_bytes = session.take_download()
+            if zip_bytes is None:
+                self._json(HTTPStatus.NOT_FOUND, {"ok": False, "codigo": "DOWNLOAD_UNAVAILABLE"})
+                return
+            self.send_response(HTTPStatus.OK)
+            self._headers("application/zip", len(zip_bytes))
+            self.send_header(
+                "Content-Disposition",
+                'attachment; filename="mcpanonimohealth-lote.zip"',
+            )
+            self.end_headers()
+            self.wfile.write(zip_bytes)
+            session.finish()
+            return
         self._json(HTTPStatus.NOT_FOUND, {"ok": False, "codigo": "NOT_FOUND"})
 
     def do_OPTIONS(self) -> None:  # noqa: N802
@@ -143,13 +177,22 @@ class _RequestHandler(BaseHTTPRequestHandler):
         if length <= 0 or length > MAX_REQUEST_BYTES:
             self._json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, session.ui_error("FILE_TOO_LARGE"))
             return
+        if session.is_finished():
+            self._json(HTTPStatus.CONFLICT, session.ui_error("SESSION_ALREADY_USED"))
+            return
         try:
-            suffix, payload = _safe_upload(
+            uploads = _safe_uploads(
                 self.headers.get("Content-Type", ""), self.rfile.read(length)
             )
-            result = session.process(suffix, payload)
+            result = session.process_uploads(uploads)
         except ValueError as exc:
-            self._json(HTTPStatus.BAD_REQUEST, session.ui_error(str(exc)))
+            code = str(exc)
+            status = (
+                HTTPStatus.CONFLICT if code == "SESSION_ALREADY_USED" else HTTPStatus.BAD_REQUEST
+            )
+            self._json(status, session.ui_error(code))
+            if code == "SESSION_ALREADY_USED":
+                session.finish()
             return
         except Exception:
             self._json(
@@ -158,12 +201,16 @@ class _RequestHandler(BaseHTTPRequestHandler):
             )
             session.finish()
             return
-        self._json(HTTPStatus.OK, session.ui_result(result))
+        # Lote com ZIP: mantém a sessão até baixar ou expirar.
+        if result.get("modo") == "lote" and result.get("baixar_disponivel"):
+            self._json(HTTPStatus.OK, result)
+            return
+        self._json(HTTPStatus.OK, result)
         session.finish()
 
 
 class LocalIntakeSession:
-    """Uma página localhost, um job reservado e no máximo um documento."""
+    """Página localhost: um ou vários documentos, com revisão e ZIP local."""
 
     def __init__(self, manager: Any, *, open_browser: bool = True) -> None:
         self.manager = manager
@@ -182,6 +229,8 @@ class LocalIntakeSession:
         self.job_id = str(self.job["job_id"])
         self._finished = threading.Event()
         self._process_lock = threading.Lock()
+        self._download_zip: bytes | None = None
+        self._download_lock = threading.Lock()
 
     def start(self) -> dict[str, object]:
         with _sessions_lock:
@@ -197,24 +246,85 @@ class LocalIntakeSession:
                 raise RuntimeError("não foi possível abrir o navegador local")
         return dict(self.job)
 
+    def is_finished(self) -> bool:
+        return self._finished.is_set()
+
     def process(self, suffix: str, payload: bytes) -> dict[str, object]:
-        if not self._process_lock.acquire(blocking=False):
+        """Compatibilidade com testes de arquivo único."""
+
+        return self.process_uploads([(suffix, payload)])
+
+    def process_uploads(self, uploads: list[tuple[str, bytes]]) -> dict[str, Any]:
+        # Uso único: o lock permanece adquirido após o primeiro sucesso.
+        if self._finished.is_set() or not self._process_lock.acquire(blocking=False):
             raise ValueError("SESSION_ALREADY_USED")
-        try:
+        started = time.monotonic()
+        if len(uploads) == 1:
+            suffix, payload = uploads[0]
             with tempfile.TemporaryDirectory(prefix="mcpanonimohealth-local-") as directory:
                 os.chmod(directory, 0o700)
                 path = Path(directory) / f"document{suffix}"
                 path.write_bytes(payload)
                 os.chmod(path, 0o600)
                 del payload
-                return self.manager.process_path(self.job_id, path)
-        finally:
-            self._process_lock.release()
+                result = self.manager.process_path(self.job_id, path)
+            return self.ui_result(result, clean_text=self.released_text())
+
+        with tempfile.TemporaryDirectory(prefix="mcpanonimohealth-lote-out-") as out_dir:
+            os.chmod(out_dir, 0o700)
+            batch = process_batch_payloads(
+                uploads,
+                Path(out_dir),
+                keep_text=True,
+            )
+            zip_bytes = _zip_directory(Path(out_dir))
+        duration_ms = round((time.monotonic() - started) * 1000)
+        pages = sum(item.paginas for item in batch.itens)
+        job = self.manager.complete_batch(
+            self.job_id,
+            liberados=batch.liberados,
+            retidos=batch.retidos,
+            erros=batch.erros,
+            pages=pages,
+            duration_ms=duration_ms,
+            itens=[
+                {
+                    "estado": item.estado,
+                    "iniciais": item.iniciais,
+                    "tipo": item.tipo,
+                    "data_documento": item.data_documento,
+                    "relativo": item.relativo,
+                    "paginas": item.paginas,
+                    "motivos": list(item.motivos),
+                    "texto": item.texto,
+                }
+                for item in batch.itens
+            ],
+        )
+        with self._download_lock:
+            self._download_zip = zip_bytes
+        return self.ui_batch_result(job, batch, download_ready=True)
+
+    def take_download(self) -> bytes | None:
+        with self._download_lock:
+            payload = self._download_zip
+            self._download_zip = None
+            return payload
+
+    def released_text(self) -> str | None:
+        """Texto desidentificado para revisão local na própria página (somente PASS)."""
+
+        try:
+            return self.manager.get_clean_text(self.job_id)
+        except Exception:
+            return None
 
     def finish(self) -> None:
         if self._finished.is_set():
             return
         self._finished.set()
+        with self._download_lock:
+            self._download_zip = None
         threading.Thread(target=self._shutdown, daemon=True).start()
 
     def expire(self) -> None:
@@ -241,15 +351,61 @@ class LocalIntakeSession:
         return {"ok": False, "estado": "ERROR", "codigo": code}
 
     @staticmethod
-    def ui_result(result: dict[str, object]) -> dict[str, Any]:
-        # O navegador local recebe somente métricas; o texto limpo continua no job MCP.
-        return {
+    def ui_result(result: dict[str, object], *, clean_text: str | None = None) -> dict[str, Any]:
+        payload: dict[str, Any] = {
             "ok": True,
+            "modo": "unico",
             "estado": str(result.get("state", "ERROR")),
             "paginas": int(result.get("pages", 0)),
             "duracao_ms": int(result.get("duration_ms", 0)),
             "contagens": dict(result.get("counts", {})),
             "motivos": list(result.get("reasons", [])),
+        }
+        if payload["estado"] == "PASS" and clean_text:
+            payload["texto_desidentificado"] = clean_text
+        return payload
+
+    @staticmethod
+    def ui_batch_result(
+        job: dict[str, object],
+        batch: Any,
+        *,
+        download_ready: bool,
+    ) -> dict[str, Any]:
+        items = []
+        for index, item in enumerate(batch.itens, start=1):
+            entry: dict[str, Any] = {
+                "indice": index,
+                "estado": item.estado,
+                "iniciais": item.iniciais,
+                "tipo": item.tipo,
+                "data_documento": item.data_documento,
+                "relativo": item.relativo,
+                "paginas": item.paginas,
+                "motivos": list(item.motivos),
+            }
+            if item.estado == "PASS" and item.texto:
+                entry["texto_desidentificado"] = item.texto
+            items.append(entry)
+        return {
+            "ok": True,
+            "modo": "lote",
+            "estado": str(job.get("state", "ERROR")),
+            "paginas": int(job.get("pages", 0)),
+            "duracao_ms": int(job.get("duration_ms", 0)),
+            "processados": batch.processados,
+            "liberados": batch.liberados,
+            "retidos": batch.retidos,
+            "erros": batch.erros,
+            "contagens": dict(job.get("counts", {})),
+            "motivos": list(job.get("reasons", [])),
+            "itens": items,
+            "baixar_disponivel": download_ready and batch.liberados > 0,
+            "aviso": (
+                "Lote local pronto. Baixe o ZIP se quiser arquivo no disco. "
+                "O agente já pode obter os textos (obter_texto_desidentificado) "
+                "e organizar a análise — sem precisar de confirmação no chat."
+            ),
         }
 
 

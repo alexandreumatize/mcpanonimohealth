@@ -48,6 +48,7 @@ class EntityType(StrEnum):
     DATE_OF_BIRTH = "DATA_NASCIMENTO"
     DATE = "DATA"
     AGE = "IDADE"
+    INSURANCE = "CONVENIO"
 
 
 @dataclass(frozen=True, slots=True, order=True)
@@ -92,8 +93,8 @@ class Finding:
 class SanitizationResult:
     """Resultado que pode atravessar a fronteira do sanitizador.
 
-    Em ``HOLD``, ``sanitized_text`` é sempre ``None`` para impedir liberação
-    acidental de conteúdo com risco residual.
+    Em ``PASS``, o texto mascarado é liberado para o agente. ``HOLD`` fica
+    reservado a entradas vazias ou ilegíveis — não a avisos de OCR/QR.
     """
 
     state: JobState

@@ -133,20 +133,48 @@ Para desinstalar, execute `bash scripts/uninstall.sh` no macOS ou `.\scripts\uni
 uv sync
 uv run pytest
 uv run python -m mcpanonimohealth.cli doctor
+uv run python -m mcpanonimohealth.cli batch --input ./entrada --output ./saida
 uv run python -m mcpanonimohealth.cli serve
 ```
 
+### Lote local (organização por paciente)
+
+Na interface do navegador (vários arquivos ou pasta), o lote em `PASS` fica disponível ao agente via `obter_texto_desidentificado`: pacote com `itens[]` (relativo/iniciais/tipo/data + texto) para organizar a análise na conversa, além do ZIP opcional na página. Modelo: **local** processa o original; **nuvem** (agente) só vê derivado `PASS`.
+
+O comando `batch` (ou a ferramenta MCP `processar_lote_local`) também processa uma pasta e grava **somente texto desidentificado** em:
+
+```text
+saida/
+  MDS/
+    receita_2026-04-24.txt
+    formulario_2026-04-24.txt
+  manifesto_lote.json
+```
+
+- pasta = **iniciais** do paciente (não o nome completo);
+- arquivo = **tipo** (`receita`, `formulario`, `relatorio`, …) + **data** do documento (emissão/consulta quando detectável);
+- o original permanece onde está; não é copiado para a saída.
+
 O servidor usa MCP por `stdio`. Não escreva mensagens em `stdout` durante `serve`, pois isso corrompe o protocolo. Os originais não devem aparecer em logs, exceções ou testes; o corpus do projeto é exclusivamente sintético.
 
-## Escopo da versão 0.2
+## Escopo da versão 0.4
 
 - interface local dedicada, responsiva e alinhada ao design Surgical Precision do curso Medical Code;
 - servidor ligado somente a `127.0.0.1`, sessão aleatória, uso único, CSP sem recursos externos e proteção de origem;
+- lote no navegador (multi/pasta) + ZIP; após `PASS`, o MCP libera `itens[]` organizados ao agente;
+- o agente polla `consultar_job` sozinho (sem “Feito” no chat); tools curtas para caber em timeouts ~60s dos hosts;
+- lote CLI: pasta de entrada → textos desidentificados organizados por iniciais/tipo/data;
 - instruções de recusa de anexos nativos para Codex e Claude Code;
 - até 10 páginas/imagens e 50 MB por caso;
 - PDF, PNG, JPEG, WebP, TIFF, HEIC/HEIF e texto simples, conforme suporte instalado;
 - documentos impressos e screenshots;
 - saída para o agente restrita a texto em `PASS`;
+- retenção do derivado com expiração ativa (timer por job) além do descarte explícito;
+- `doctor` carrega o NER local e executa um caso sintético curto (sem OCR de PDF);
+- política orientada a **liberar** texto clínico desidentificado (idade e sexo preservados);
+  QR/OCR fraco geram aviso, não bloqueio do documento inteiro;
 - manuscritos difíceis, fotografias clínicas sem texto, DICOM e vídeo ficam fora deste MVP.
+
+Ainda é protótipo: mascaramento automático pode falhar; revise o texto em `PASS` antes de uso em pesquisa.
 
 Licença Apache-2.0. Contribuições são bem-vindas desde que não incluam PHI nem documentos reais.

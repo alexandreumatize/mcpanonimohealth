@@ -22,7 +22,7 @@
         <div class="hero-copy">
           <p class="eyebrow">Proteção de dados · fluxo local</p>
           <h1 id="page-title">Seu documento<br><em>não entra</em> no chat.</h1>
-          <p class="lede">Escolha a receita, o laudo, a imagem ou o PDF nesta página. O arquivo será processado no seu computador; o agente receberá somente o texto aprovado pela barreira de desidentificação.</p>
+          <p class="lede">Escolha um arquivo, vários ou uma pasta nesta página. O processamento é local. O agente já está aguardando este job — não precisa confirmar no chat; ao terminar aqui, ele puxa só o texto liberado em PASS.</p>
         </div>
 
         <div class="custody" aria-label="Fluxo de custódia do documento">
@@ -41,7 +41,7 @@
           <div class="custody-step">
             <span class="step-index">03</span>
             <strong>Texto liberado</strong>
-            <small>somente quando houver PASS</small>
+            <small>único ou lote com ZIP</small>
           </div>
         </div>
       </section>
@@ -50,24 +50,32 @@
         <div class="intake-heading">
           <div>
             <p class="eyebrow">Entrada protegida</p>
-            <h2 id="intake-title">Escolha o documento neste computador</h2>
+            <h2 id="intake-title">Escolha arquivos ou pasta neste computador</h2>
           </div>
-          <span class="format-list">PDF · PNG · JPEG · HEIC · TIFF · TXT</span>
+          <span class="format-list">PDF · PNG · JPEG · HEIC · TIFF · TXT · até 40</span>
         </div>
 
         <form id="intake-form" novalidate>
-          <input id="document" name="document" type="file" hidden accept=".pdf,.png,.jpg,.jpeg,.webp,.tif,.tiff,.heic,.heif,.txt">
+          <input id="document" name="document" type="file" hidden multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.tif,.tiff,.heic,.heif,.txt">
+          <input id="folder" name="folder" type="file" hidden webkitdirectory multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.tif,.tiff,.heic,.heif,.txt">
           <button id="drop-zone" class="drop-zone" type="button">
             <span class="file-glyph" aria-hidden="true"><i></i><i></i><i></i></span>
             <span class="drop-copy">
-              <strong id="drop-title">Selecionar documento</strong>
-              <small id="drop-note">Clique aqui ou arraste o arquivo para esta área</small>
+              <strong id="drop-title">Selecionar documentos</strong>
+              <small id="drop-note">Clique, arraste vários arquivos, ou use “Escolher pasta”</small>
             </span>
-            <span class="choose-label">Escolher arquivo</span>
+            <span class="choose-label">Escolher arquivos</span>
           </button>
 
+          <div class="picker-row">
+            <button id="pick-files" class="ghost-action" type="button">Escolher arquivos</button>
+            <button id="pick-folder" class="ghost-action" type="button">Escolher pasta</button>
+          </div>
+
+          <ul id="file-list" class="file-list" hidden></ul>
+
           <div class="action-row">
-            <p><strong>O que acontece agora?</strong> Uma cópia temporária privada será criada, processada e apagada imediatamente. O nome do arquivo não será devolvido ao agente.</p>
+            <p><strong>O que acontece agora?</strong> Cópias temporárias privadas serão processadas e apagadas. Em lote, você poderá baixar um ZIP. O agente no chat consulta este job sozinho — não precisa digitar “Feito”.</p>
             <button id="process-button" class="primary-action" type="submit" disabled>Desidentificar neste computador</button>
           </div>
         </form>
@@ -75,8 +83,8 @@
         <section id="processing" class="processing" hidden aria-live="polite">
           <div class="scan-line" aria-hidden="true"></div>
           <span class="processing-label">Processamento local em andamento</span>
-          <strong>Não feche esta página.</strong>
-          <small>Imagens e PDFs podem levar de 30 a 60 segundos.</small>
+          <strong id="processing-title">Não feche esta página.</strong>
+          <small id="processing-note">Imagens e PDFs podem levar de 30 a 60 segundos por arquivo.</small>
         </section>
 
         <section id="result" class="result" hidden aria-live="assertive">
@@ -86,6 +94,17 @@
             <h2 id="result-title"></h2>
             <p id="result-message"></p>
             <div id="result-metrics" class="result-metrics"></div>
+            <div id="batch-actions" class="batch-actions" hidden>
+              <a id="download-zip" class="primary-action download-action" href="baixar.zip">Baixar ZIP do lote</a>
+            </div>
+            <div id="batch-list" class="batch-list" hidden></div>
+            <div id="result-text-wrap" class="result-text-wrap" hidden>
+              <div class="result-text-head">
+                <p class="eyebrow">Texto desidentificado</p>
+                <button id="copy-text" class="copy-action" type="button">Copiar texto</button>
+              </div>
+              <pre id="result-text" class="result-text"></pre>
+            </div>
           </div>
         </section>
       </section>

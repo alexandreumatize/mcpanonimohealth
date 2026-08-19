@@ -2,7 +2,10 @@
 
 ## Aviso essencial
 
-O mcpanonimohealth 0.2 é uma demonstração didática, não validada para dados reais, assistência clínica ou conformidade regulatória. Detecção automática pode falhar. Não trate `PASS` como certificação de anonimização.
+O mcpanonimohealth 0.2 é uma demonstração didática em evolução. A política atual prioriza
+**entregar** texto clínico desidentificado (preservando idade e sexo para análise) e mascarar
+identificadores diretos. Detecção automática pode falhar. Não trate `PASS` como certificação
+de anonimização.
 
 ## Relatar uma vulnerabilidade
 
@@ -24,7 +27,11 @@ Proteções pretendidas:
 - `HOLD`, `ERROR` e `EXPIRED` não devolvem conteúdo clínico;
 - logs devem conter somente metadados operacionais não identificáveis;
 - documentos são tratados como dados não confiáveis, inclusive contra prompt injection;
-- derivados temporários expiram e podem ser descartados explicitamente.
+- derivados temporários expiram de forma ativa (timer por job, além do sweep em
+  consultas) e podem ser descartados explicitamente;
+- `doctor` / `verificar_instalacao` carregam o NER local e sanitizam um caso
+  sintético curto; `ok` não equivale a OCR de PDF multipágina nem a validação
+  para PHI real.
 
 Fora da fronteira de proteção:
 

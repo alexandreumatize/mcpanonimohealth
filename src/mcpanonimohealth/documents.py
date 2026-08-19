@@ -46,6 +46,8 @@ class ExtractedDocument:
     hold_reasons: tuple[str, ...]
     median_confidence: float
     duration_ms: int
+    # Avisos de qualidade (OCR fraco, QR) não bloqueiam a liberação do texto.
+    warnings: tuple[str, ...] = ()
 
 
 _ocr_instance = None
@@ -182,18 +184,38 @@ def extract_document(path: Path) -> ExtractedDocument:
 
     confidences = [score for page in pages for score in page.confidences]
     median = statistics.median(confidences) if confidences else 0.0
-    if median < MIN_MEDIAN_CONFIDENCE:
+    if confidences and median < MIN_MEDIAN_CONFIDENCE:
         reasons.append("DOCUMENT_LOW_CONFIDENCE")
     text = "\n\n".join(page.text for page in pages if page.text.strip()).strip()
-    if len(re.sub(r"\W", "", text)) < 20:
-        reasons.append("INSUFFICIENT_CLINICAL_TEXT")
+    soft, hard = _partition_document_signals(reasons, text)
     return ExtractedDocument(
         pages=tuple(pages),
         text=text,
-        hold_reasons=tuple(sorted(set(reasons))),
+        hold_reasons=tuple(sorted(set(hard))),
         median_confidence=median,
         duration_ms=round((time.monotonic() - started) * 1000),
+        warnings=tuple(sorted(set(soft))),
     )
+
+
+def _partition_document_signals(reasons: list[str], text: str) -> tuple[list[str], list[str]]:
+    """QR/confiança baixa são avisos; só texto inutilizável bloqueia o job."""
+
+    soft: list[str] = []
+    hard: list[str] = []
+    for reason in reasons:
+        if (
+            reason.endswith("_QR_OR_BARCODE")
+            or reason.endswith("_LOW_CONFIDENCE")
+            or reason.endswith("_NO_TEXT")
+            or reason == "DOCUMENT_LOW_CONFIDENCE"
+        ):
+            soft.append(reason)
+        else:
+            hard.append(reason)
+    if len(re.sub(r"\W", "", text)) < 20:
+        hard.append("INSUFFICIENT_CLINICAL_TEXT")
+    return soft, hard
 
 
 __all__ = [

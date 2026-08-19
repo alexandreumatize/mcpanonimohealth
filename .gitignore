@@ -18,3 +18,8 @@ jobs/
 *.patient.*
 *.phi.*
 
+# Artefatos locais de captura e diagnóstico.
+.playwright-cli/
+output/
+qr-github-mcpanonimohealth.png
+
