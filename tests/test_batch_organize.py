@@ -64,5 +64,5 @@ def test_process_batch_writes_organized_deidentified_files(tmp_path: Path) -> No
     assert "Maria da Silva" not in content
     assert "529.982.247-25" not in content
     assert "metotrexato" in content.lower()
-    assert "55 anos" in content
+    assert "[IDADE_50-59]" in content
     assert (destination / "manifesto_lote.json").is_file()

@@ -52,8 +52,9 @@ Retorno: 20/08/2026
         assert secret not in result.sanitized_text
     assert "[PACIENTE_001]" in result.sanitized_text
     assert "[DATA_NASCIMENTO]" in result.sanitized_text
-    assert "10/08/2026" in result.sanitized_text
-    assert "20/08/2026" in result.sanitized_text
+    assert "10/08/2026" not in result.sanitized_text
+    assert "20/08/2026" not in result.sanitized_text
+    assert "[DATA_2026-08]" in result.sanitized_text
     assert "[DATA_D0]" not in result.sanitized_text
     assert "[DATA_D+10]" not in result.sanitized_text
 
@@ -89,7 +90,7 @@ Relatório: Ana Clara Souza retornou sem novas fraturas.
     clean = result.sanitized_text
     assert "Ana Clara Souza" not in clean
     assert "ANA CLARA SOUZA" not in clean
-    assert "83 anos" in clean
+    assert "[IDADE_80+]" in clean
     assert "M80.0" in clean
     assert clean.count("[PACIENTE_") >= 3
 
@@ -115,7 +116,8 @@ https://portal.exemplo.com.br/doc/abc
         "Maria da Silva",
     ):
         assert secret not in clean, secret
-    assert "24/04/2026" in clean
+    assert "24/04/2026" not in clean
+    assert "[DATA_2026-04]" in clean
     assert "[URL_" in clean
     assert "[CREDENCIAL_" in clean
 
@@ -152,8 +154,9 @@ Data do exame: 10/08/2026
         assert secret not in clean, secret
     # Primeiro nome isolado perto de CRM também some.
     assert re.search(r"\bAlexandre\b", clean) is None
-    assert "10/08/2026" in clean
-    assert "83 anos" in clean
+    assert "10/08/2026" not in clean
+    assert "[DATA_2026-08]" in clean
+    assert "[IDADE_80+]" in clean
     assert "[MEDICO_" in clean
 
 
@@ -183,7 +186,7 @@ CID M80.0, 83 anos.
     assert "Eore tily Sos Rhhels" not in clean
     assert "22-02-1942" not in clean
     assert re.search(r"\b90\b", clean) is None
-    assert "83 anos" in clean
+    assert "[IDADE_80+]" in clean
     assert "M80.0" in clean
 
 
@@ -210,7 +213,7 @@ Paciente do sexo feminino, 83 anos, CID M80.0.
     assert "Alexandre" not in clean
     assert "60 mg" in clean
     assert "252.77" not in clean
-    assert "83 anos" in clean
+    assert "[IDADE_80+]" in clean
     assert "M80.0" in clean
 
 
@@ -254,7 +257,7 @@ Paciente do sexo feminino, 83 anos, CID M80.0.
         "83515",
     ):
         assert secret not in clean, secret
-    assert "83 anos" in clean
+    assert "[IDADE_80+]" in clean
     assert "M80.0" in clean
     assert "MEDICAMENTO" in clean
     assert "[CRM_" in clean
@@ -293,12 +296,12 @@ Relatório emitido em Boqueirão.
         "Rua das Flores",
     ):
         assert secret not in clean, secret
-    assert "83 anos" in clean
+    assert "[IDADE_80+]" in clean
     assert "M80.0" in clean
     assert "[ENDERECO_" in clean
 
 
-def test_preserves_clinical_and_document_dates(sanitizer: Sanitizer) -> None:
+def test_masks_document_dates_as_month_year_and_dob(sanitizer: Sanitizer) -> None:
     raw = """
 Paciente: Maria da Silva
 Nascimento: 03/02/1942
@@ -312,9 +315,9 @@ Praia Grande, 24 de abril de 2026.
     clean = result.sanitized_text or ""
     assert "03/02/1942" not in clean
     assert "[DATA_NASCIMENTO]" in clean
-    assert "15/03/2026" in clean
-    assert "24/04/2026" in clean
-    assert "24 de abril de 2026" in clean
+    assert "15/03/2026" not in clean
+    assert "24/04/2026" not in clean
+    assert "[DATA_2026-04]" in clean
     assert "[DATA_D0]" not in clean
 
 
@@ -327,11 +330,12 @@ def test_default_continues_without_local_ner() -> None:
     assert "NER_NOT_READY_CONTINUED" in result.reasons
     assert "Maria da Silva" not in result.sanitized_text
     assert "529.982.247-25" not in result.sanitized_text
-    assert "42 anos" in result.sanitized_text
+    assert "42 anos" not in result.sanitized_text
+    assert "[IDADE_40-49]" in result.sanitized_text
     assert "feminino" in result.sanitized_text
 
 
-def test_preserves_age_and_sex_for_research(sanitizer: Sanitizer) -> None:
+def test_generalizes_age_and_keeps_sex_for_research(sanitizer: Sanitizer) -> None:
     raw = (
         "Paciente: Maria da Silva\n"
         "Idade: 55 anos\n"
@@ -344,7 +348,8 @@ def test_preserves_age_and_sex_for_research(sanitizer: Sanitizer) -> None:
     assert result.sanitized_text is not None
     assert "Maria da Silva" not in result.sanitized_text
     assert "529.982.247-25" not in result.sanitized_text
-    assert "55 anos" in result.sanitized_text
+    assert "55 anos" not in result.sanitized_text
+    assert "[IDADE_50-59]" in result.sanitized_text
     assert "feminino" in result.sanitized_text
     assert "artrite reumatoide" in result.sanitized_text
     assert "[FAIXA_ETARIA" not in result.sanitized_text
@@ -427,7 +432,7 @@ Telefone(s): 99800-0904
         "Maria da Silva",
     ):
         assert secret not in clean, secret
-    assert "83 anos" in clean
+    assert "[IDADE_80+]" in clean
     assert "Feminino" in clean or "feminino" in clean.lower()
     assert "M80.0" in clean
     assert "[TELEFONE_" in clean
@@ -471,7 +476,7 @@ Nascimento OCR:
         "Bradesco Saúde Empresarial",
     ):
         assert secret not in clean, secret
-    assert "83 anos" in clean
+    assert "[IDADE_80+]" in clean
     assert "M80.0" in clean
     assert "feminino" in clean.lower()
     assert "[DATA_NASCIMENTO]" in clean
@@ -507,7 +512,7 @@ Paciente do sexo feminino, 83 anos, CID M80.0.
         "beatriz.oliveira@clinica-sintetica.example",
     ):
         assert secret not in clean, secret
-    assert "83 anos" in clean
+    assert "[IDADE_80+]" in clean
     assert "M80.0" in clean
     assert "[MEDICO_" in clean
     assert "[CRM_" in clean

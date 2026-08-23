@@ -13,8 +13,39 @@ from .domain import EntityType, Finding, JobState, SanitizationResult, Span
 
 _DATE_FORMATS = ("%d/%m/%Y", "%d.%m.%Y", "%d-%m-%Y", "%Y-%m-%d")
 _MAX_MASK_ROUNDS = 8
+
+
+def _age_band(value: str) -> str | None:
+    """Converte '34 anos' em faixa etária (30-39) para reduzir reidentificação."""
+
+    import re as _re
+
+    match = _re.search(r"\d+", value)
+    if not match:
+        return None
+    age = int(match.group(0))
+    if age < 0:
+        return None
+    if age <= 9:
+        return "0-9"
+    if age <= 17:
+        return "10-17"
+    if age <= 29:
+        return "18-29"
+    if age <= 39:
+        return "30-39"
+    if age <= 49:
+        return "40-49"
+    if age <= 59:
+        return "50-59"
+    if age <= 69:
+        return "60-69"
+    if age <= 79:
+        return "70-79"
+    return "80+"
 # Idade, sexo e datas clínicas/documento ficam para dataset; nascimento segue mascarado.
-_PRESERVE_ENTITIES = frozenset({EntityType.AGE, EntityType.DATE})
+# Padrão (LGPD): idade vira faixa etária e data vira mês/ano — reduz reidentificação.
+_PRESERVE_ENTITIES = frozenset()
 # Nomes detectados uma vez devem ser mascarados em todas as ocorrências do PDF.
 _NAME_ENTITIES = frozenset(
     {EntityType.PATIENT, EntityType.PERSON, EntityType.DOCTOR}
@@ -126,12 +157,16 @@ class _TokenRegistry:
         if entity is EntityType.DATE_OF_BIRTH:
             return "[DATA_NASCIMENTO]"
 
+        if entity is EntityType.AGE:
+            band = _age_band(value)
+            if band is not None:
+                return f"[IDADE_{band}]"
+
         if entity is EntityType.DATE:
             parsed = _parse_date(value)
-            if parsed is not None and self._date_anchor is not None:
-                offset = (parsed - self._date_anchor).days
-                suffix = "D0" if offset == 0 else f"D{offset:+d}"
-                return f"[DATA_{suffix}]"
+            if parsed is not None:
+                # Padrão LGPD: mês/ano, sem dia — preserva utilidade clínica sem dia exato.
+                return f"[DATA_{parsed.year:04d}-{parsed.month:02d}]"
 
         self._next_index[entity] += 1
         return f"[{entity.value}_{self._next_index[entity]:03d}]"
