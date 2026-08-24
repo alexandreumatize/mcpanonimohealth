@@ -127,6 +127,11 @@ def _pdf_pages(path: Path) -> tuple[list[ExtractedPage], list[str]]:
     try:
         for index in range(len(document)):
             page = document[index]
+            native = _native_page_text(page)
+            if native is not None:
+                # PDF com texto nativo: leitura direta, sem OCR (rápido).
+                pages.append(ExtractedPage(index + 1, native, (1.0,)))
+                continue
             bitmap = page.render(scale=200 / 72)
             extracted, page_reasons = _ocr_page(bitmap.to_pil(), index + 1)
             pages.append(extracted)
@@ -134,6 +139,30 @@ def _pdf_pages(path: Path) -> tuple[list[ExtractedPage], list[str]]:
     finally:
         document.close()
     return pages, reasons
+
+
+# Mínimo de caracteres para considerar que a página tem camada de texto nativa.
+_NATIVE_TEXT_MIN_CHARS = 120
+
+
+def _native_page_text(page: object) -> str | None:
+    """Extrai texto nativo da página; None se a página for imagem/escaneada."""
+
+    try:
+        text_page = page.get_textpage()
+        try:
+            text = text_page.get_text_range()
+        finally:
+            text_page.close()
+    except Exception:
+        return None
+    if not text or not isinstance(text, str):
+        return None
+    compact = text.strip()
+    # Heurística: página escaneada costuma ter pouco ou nenhum texto embutido.
+    if len(compact) < _NATIVE_TEXT_MIN_CHARS:
+        return None
+    return compact
 
 
 def _image_pages(path: Path) -> tuple[list[ExtractedPage], list[str]]:
