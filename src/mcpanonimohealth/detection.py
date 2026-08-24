@@ -40,6 +40,13 @@ _HSPACE = r"[ \t]"
 _NAME = rf"{_NAME_WORD}(?:{_HSPACE}+(?:(?:d[aeo]s?|e){_HSPACE}+)?{_NAME_WORD}){{1,5}}"
 _CITY_NAME = rf"{_CITY_WORD}(?:{_HSPACE}+{_CITY_WORD}){{0,3}}"
 
+# Prefixos de siglas clínicas que precedem siglas de 2 letras (ex.: Anti-Sm,
+# Anti-Ro). Impede que "Anti" seja tomado como nome de cidade.
+_SIGLA_PREFIXO = r"(?:Anti|Anti-|HLA|DR|DQ)"
+_UF_PATTERN = (
+    r"(?:AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)"
+)
+
 
 @dataclass(frozen=True, slots=True)
 class _Rule:
@@ -262,13 +269,21 @@ _CONTEXT_RULES: tuple[_Rule, ...] = (
         "city_uf_slash",
         EntityType.ADDRESS,
         # Praia Grande/SP | Santos/SP — só espaço horizontal entre palavras.
-        _compile(rf"(?P<value>\b{_CITY_NAME}{_HSPACE}*/{_HSPACE}*[A-Z]{{2}}\b)"),
+        # UF com lista fechada + lookahead de sigla clínica: "Anti-Sm",
+        # "Anti/Ro" não são endereços.
+        _compile(
+            rf"(?P<value>\b(?!Anti[-–/])(?!anti[-–/])"
+            rf"{_CITY_NAME}{_HSPACE}*/{_HSPACE}*{_UF_PATTERN}\b)"
+        ),
         0.95,
     ),
     _Rule(
         "city_uf_dash",
         EntityType.ADDRESS,
-        _compile(rf"(?P<value>\b{_CITY_NAME}{_HSPACE}*[-–]{_HSPACE}*[A-Z]{{2}}\b)"),
+        _compile(
+            rf"(?P<value>\b(?!Anti[-–/])(?!anti[-–/])"
+            rf"{_CITY_NAME}{_HSPACE}*[-–]{_HSPACE}*{_UF_PATTERN}\b)"
+        ),
         0.94,
     ),
     _Rule(

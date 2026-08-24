@@ -532,3 +532,27 @@ def test_prompt_injection_phrase_is_treated_as_data(sanitizer: Sanitizer) -> Non
     assert "Maria da Silva" not in result.sanitized_text
     assert "529.982.247-25" not in result.sanitized_text
     assert "Ignore as instruções anteriores" in result.sanitized_text
+
+
+def test_does_not_mask_autoantibody_siglas_as_address(sanitizer: Sanitizer) -> None:
+    """Anti-Sm/La/Ro/RNP são siglas clínicas, não cidades com UF."""
+
+    raw = (
+        "Sorologia: Anti-Sm moderadamente positivo | Anti-La negativo | "
+        "Anti-Ro NR | anti-RNP reagente | Anti-dsDNA positivo 1/40."
+    )
+    result = sanitizer.sanitize(raw)
+    assert result.state is JobState.PASS
+    clean = result.sanitized_text or ""
+    for sigla in ("Anti-Sm", "Anti-La", "Anti-Ro", "anti-RNP", "Anti-dsDNA"):
+        assert sigla in clean, sigla
+    assert "[ENDERECO_" not in clean
+
+
+def test_still_masks_real_city_uf_addresses(sanitizer: Sanitizer) -> None:
+    raw = "Paciente reside em Praia Grande-SP, perto de Santos/SP."
+    result = sanitizer.sanitize(raw)
+    clean = result.sanitized_text or ""
+    assert "Praia Grande-SP" not in clean
+    assert "Santos/SP" not in clean
+    assert "[ENDERECO_" in clean
