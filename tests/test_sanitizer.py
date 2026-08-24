@@ -250,13 +250,13 @@ Paciente do sexo feminino, 83 anos, CID M80.0.
         "185589",
         "185.589",
         "CRMISP",
-        "Reumatologista",
-        "Reumatologia",
-        "SPReumatologia",
         "ROE83515",
         "83515",
     ):
         assert secret not in clean, secret
+    # Especialidade ("MédicoReumatologista", "Reumatologia") é contexto clínico:
+    # permanece no texto (regra doctor_specialty foi removida).
+    assert "Reumatologista" in clean
     assert "[IDADE_80+]" in clean
     assert "M80.0" in clean
     assert "MEDICAMENTO" in clean
