@@ -162,17 +162,6 @@ _CONTEXT_RULES: tuple[_Rule, ...] = (
         0.97,
     ),
     _Rule(
-        "doctor_specialty",
-        EntityType.DOCTOR,
-        # Especialidade do assinante (OCR: MédicoReumatologista / SPReumatologia).
-        _compile(
-            r"(?P<value>\bm[eé]dico\s*reumatologista\b|"
-            r"\b(?:sp\s*)?reumatologista\b|"
-            r"\b(?:sp\s*)?reumatologia\b)"
-        ),
-        0.93,
-    ),
-    _Rule(
         "estado_sao_paulo_ocr",
         EntityType.ADDRESS,
         _compile(
