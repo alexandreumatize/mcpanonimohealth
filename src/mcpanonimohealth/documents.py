@@ -25,6 +25,7 @@ SUPPORTED_SUFFIXES = {
     ".heic",
     ".heif",
     ".txt",
+    ".md",
 }
 
 
@@ -170,7 +171,7 @@ def extract_document(path: Path) -> ExtractedDocument:
     if suffix not in SUPPORTED_SUFFIXES:
         raise DocumentError("UNSUPPORTED_FORMAT")
 
-    if suffix == ".txt":
+    if suffix in {".txt", ".md"}:
         try:
             text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeError) as exc:

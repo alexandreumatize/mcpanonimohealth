@@ -10,7 +10,7 @@ from mcpanonimohealth.detection import DeterministicDetector
 from mcpanonimohealth.documents import DocumentError, extract_document
 from mcpanonimohealth.domain import JobState
 from mcpanonimohealth.jobs import JobManager
-from mcpanonimohealth.sanitizer import Sanitizer
+from mcpanonimohealth.sanitizer import Sanitizer, sanitize_text
 
 
 def _synthetic_image(path: Path, lines: str) -> Image.Image:
@@ -218,3 +218,22 @@ def test_complete_batch_release_package_for_agent() -> None:
     assert release["itens"][0]["texto_desidentificado"].startswith("Paciente")
     assert "MS/receita_2026-08-10.txt" in str(release["texto_desidentificado"])
     assert manager.get_clean_text(job_id)
+
+
+def test_markdown_document_supported(tmp_path: Path) -> None:
+    raw = tmp_path / "receita.md"
+    raw.write_text(
+        "# Receita\n\nPaciente: Maria da Silva\nCPF: 529.982.247-25\n"
+        "Diagnóstico: artrite reumatoide sintética.\n",
+        encoding="utf-8",
+    )
+    document = extract_document(raw)
+    assert document.hold_reasons == ()
+    assert "Maria da Silva" in document.text
+    assert "# Receita" in document.text
+
+    result = sanitize_text(document.text, detector=DeterministicDetector(), require_ner=False)
+    assert result.state == JobState.PASS
+    assert result.sanitized_text is not None
+    assert "Maria da Silva" not in result.sanitized_text
+    assert "529.982.247-25" not in result.sanitized_text
